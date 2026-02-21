@@ -52,7 +52,7 @@ async def _send_welcome(client: Client, chat_id: int, user):
 
     await client.send_photo(
         chat_id=chat_id,
-        photo=image or Config.FORCE_IMAGE,
+        photo=image or Config.WELCOME_IMAGE,  # Changed to WELCOME_IMAGE
         caption=script.START_TXT.format(name),
         reply_markup=kb,
     )
@@ -143,6 +143,7 @@ async def about_cb(client: Client, query: CallbackQuery):
     await query.message.edit_caption(
         caption=script.ABOUT_TXT.format(me.first_name, me.username),
         reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📁 Source Code", url="https://github.com/yourusername/your-repo")],  # Added source code button
             [InlineKeyboardButton("🔙 Back", callback_data="back_start")]
         ])
     )
