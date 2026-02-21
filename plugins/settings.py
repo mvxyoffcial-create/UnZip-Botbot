@@ -1,3 +1,4 @@
+import os
 import pytz
 import logging
 from pyrogram import Client, filters
@@ -5,6 +6,7 @@ from pyrogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton
 )
+from config import Config
 from database import db
 from script import script
 
@@ -12,9 +14,18 @@ log = logging.getLogger(__name__)
 
 TIMEZONES = ["Asia/Kolkata", "UTC", "US/Eastern", "US/Pacific", "Europe/London", "Asia/Dubai"]
 
+# Directory to store user thumbnails
+THUMB_DIR = os.path.join(Config.DOWNLOAD_DIR, "thumbnails")
+os.makedirs(THUMB_DIR, exist_ok=True)
+
 
 def _on_off(val: bool) -> str:
     return "✅ ON" if val else "❌ OFF"
+
+
+def get_user_thumb_path(user_id: int) -> str:
+    """Get the local path for a user's thumbnail"""
+    return os.path.join(THUMB_DIR, f"thumb_{user_id}.jpg")
 
 
 async def _settings_keyboard(uid: int) -> InlineKeyboardMarkup:
@@ -95,40 +106,91 @@ _waiting_thumb: set = set()
 async def see_thumb(client: Client, query: CallbackQuery):
     uid  = query.from_user.id
     u    = await db.get_user(uid)
-    thumb = u.get("thumbnail") if u else None
-    if thumb:
-        await client.send_photo(query.message.chat.id, thumb, caption="🖼️ Your saved thumbnail")
+    thumb_path = u.get("thumbnail") if u else None
+    
+    if thumb_path and os.path.exists(thumb_path):
+        try:
+            await client.send_photo(query.message.chat.id, thumb_path, caption="🖼️ Your saved thumbnail")
+            await query.answer("✅ Thumbnail displayed!")
+        except Exception as e:
+            log.error(f"Error showing thumbnail: {e}")
+            await query.answer("❌ Error displaying thumbnail!", show_alert=True)
     else:
-        await query.answer("No thumbnail saved.", show_alert=True)
+        await query.answer("❌ No thumbnail saved.", show_alert=True)
 
 
 @Client.on_callback_query(filters.regex("^del_thumb$"))
 async def del_thumb(client: Client, query: CallbackQuery):
     uid = query.from_user.id
+    
+    # Get current thumbnail path
+    u = await db.get_user(uid)
+    thumb_path = u.get("thumbnail") if u else None
+    
+    # Delete from database
     await db.del_thumbnail(uid)
+    
+    # Delete file if exists
+    if thumb_path and os.path.exists(thumb_path):
+        try:
+            os.remove(thumb_path)
+            log.info(f"Deleted thumbnail file for user {uid}")
+        except Exception as e:
+            log.warning(f"Could not delete thumbnail file: {e}")
+    
     await query.answer("🗑️ Thumbnail deleted!", show_alert=True)
 
 
 @Client.on_message(filters.command("setthumb") & filters.private)
 async def set_thumb_cmd(client: Client, message: Message):
     uid = message.from_user.id
+    
     if message.reply_to_message and message.reply_to_message.photo:
-        file_id = message.reply_to_message.photo.file_id
-        await db.set_thumbnail(uid, file_id)
-        await message.reply_text("✅ Thumbnail saved!")
+        # Download the photo
+        status_msg = await message.reply_text("⏳ Downloading thumbnail...")
+        
+        try:
+            thumb_path = get_user_thumb_path(uid)
+            await message.reply_to_message.download(file_name=thumb_path)
+            await db.set_thumbnail(uid, thumb_path)  # Store LOCAL PATH
+            await status_msg.edit_text("✅ Thumbnail saved!")
+        except Exception as e:
+            log.error(f"Error saving thumbnail for user {uid}: {e}")
+            await status_msg.edit_text(f"❌ Error: {str(e)}")
     else:
         _waiting_thumb.add(uid)
-        await message.reply_text("📸 Send a photo to set as thumbnail:")
+        await message.reply_text(
+            "📸 **Set Custom Thumbnail**\n\n"
+            "Send me a photo to set as your custom thumbnail.\n\n"
+            "Or reply to a photo with /setthumb"
+        )
 
 
 @Client.on_message(filters.private & filters.photo)
 async def photo_received(client: Client, message: Message):
     uid = message.from_user.id
+    
     if uid in _waiting_thumb:
         _waiting_thumb.discard(uid)
-        file_id = message.photo.file_id
-        await db.set_thumbnail(uid, file_id)
-        await message.reply_text("✅ Thumbnail saved!")
+        
+        # Download the photo
+        status_msg = await message.reply_text("⏳ Downloading thumbnail...")
+        
+        try:
+            thumb_path = get_user_thumb_path(uid)
+            await message.download(file_name=thumb_path)
+            await db.set_thumbnail(uid, thumb_path)  # Store LOCAL PATH
+            await status_msg.edit_text(
+                "✅ **Thumbnail Saved!**\n\n"
+                "Your custom thumbnail has been set successfully.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("👁️ View", callback_data="see_thumb"),
+                    InlineKeyboardButton("🗑️ Delete", callback_data="del_thumb")
+                ]])
+            )
+        except Exception as e:
+            log.error(f"Error saving thumbnail for user {uid}: {e}")
+            await status_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 # ── Timezone ─────────────────────────────────────────────────────────────────
