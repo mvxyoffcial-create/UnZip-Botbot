@@ -143,7 +143,7 @@ async def about_cb(client: Client, query: CallbackQuery):
     await query.message.edit_caption(
         caption=script.ABOUT_TXT.format(me.first_name, me.username),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📁 Source Code", url="https://github.com/yourusername/your-repo")],  # Added source code button
+            [InlineKeyboardButton("🎥 Movie Website", url="https://mvxy.free.nf")],  # Added source code button
             [InlineKeyboardButton("🔙 Back", callback_data="back_start")]
         ])
     )
