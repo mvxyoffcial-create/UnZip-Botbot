@@ -88,19 +88,25 @@ async def get_seconds(time_str: str) -> int:
 async def get_welcome_image() -> str:
     """
     Fetches random anime image from API for welcome message.
+    The API returns a direct image (JPEG), not JSON.
     Falls back to Config.FORCE_IMAGE if API fails.
     """
     try:
-        async with aiohttp.ClientSession() as session:
-            # The API redirects to a direct image URL
-            async with session.get(
-                Config.WELCOME_IMAGE,
-                timeout=aiohttp.ClientTimeout(total=8),
-                allow_redirects=True
-            ) as resp:
-                if resp.status == 200:
-                    # Return the final URL after redirect (the actual image URL)
-                    return str(resp.url)
+        # Check if WELCOME_IMAGE is an API endpoint or direct image
+        if "api.aniwallpaper" in Config.WELCOME_IMAGE:
+            # It's an API - fetch and return the redirected URL
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    Config.WELCOME_IMAGE,
+                    timeout=aiohttp.ClientTimeout(total=8),
+                    allow_redirects=True
+                ) as resp:
+                    if resp.status == 200:
+                        # Return the final URL after redirect (actual image URL)
+                        return str(resp.url)
+        else:
+            # It's already a direct image URL
+            return Config.WELCOME_IMAGE
     except Exception as e:
         log.warning(f"Failed to fetch welcome image: {e}")
     
