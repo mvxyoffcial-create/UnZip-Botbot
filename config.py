@@ -21,7 +21,7 @@ class Config:
     FORCE_SUB_CHANNELS = ["zerodev2", "mvxyoffcail"]          # without @
     FORCE_IMAGE        = "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
     # Add separate welcome image (you can use same or different image)
-    WELCOME_IMAGE      = "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
+    WELCOME_IMAGE      = "https://api.aniwallpaper.workers.dev/random?type=boy"
 
     # ─── Logs ────────────────────────────────────────────────────────────────────
     LOG_CHANNEL      = int(os.environ.get("LOG_CHANNEL", 0))
