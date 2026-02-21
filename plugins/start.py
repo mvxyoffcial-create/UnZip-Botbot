@@ -44,15 +44,16 @@ def _force_sub_keyboard(channels: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-async def _send_welcome(client: Client, chat_id: int, user):
+async def _send_welcome(client: Client, message: Message, user):
+    """Send welcome message as a REPLY to the user's /start command"""
     image = await get_welcome_image()
     bot_info = await client.get_me()
     name = user.first_name if user else "there"
     kb   = _start_keyboard(bot_info.username)
 
-    await client.send_photo(
-        chat_id=chat_id,
-        photo=image or Config.WELCOME_IMAGE,  # Changed to WELCOME_IMAGE
+    # Reply to the original /start message
+    await message.reply_photo(
+        photo=image or Config.FORCE_IMAGE,
         caption=script.START_TXT.format(name),
         reply_markup=kb,
     )
@@ -86,7 +87,7 @@ async def start_private(client: Client, message: Message):
             reply_markup=_force_sub_keyboard(missing),
         )
 
-    # Sticker → 2s → delete → welcome image
+    # Sticker → 2s → delete → welcome image as REPLY
     try:
         stk = await message.reply_sticker(Config.START_STICKER)
         await asyncio.sleep(2)
@@ -94,7 +95,8 @@ async def start_private(client: Client, message: Message):
     except Exception:
         pass
 
-    await _send_welcome(client, message.chat.id, user)
+    # Send welcome as a reply to /start message
+    await _send_welcome(client, message, user)
 
 
 @Client.on_message(filters.command("start") & filters.group)
@@ -120,8 +122,22 @@ async def check_sub_cb(client: Client, query: CallbackQuery):
     if missing:
         await query.answer("❌ You haven't joined all channels yet!", show_alert=True)
         return
+    
+    # Delete force subscribe message
     await query.message.delete()
-    await _send_welcome(client, query.message.chat.id, user)
+    
+    # Send welcome as a NEW message (since we can't reply to deleted message)
+    image = await get_welcome_image()
+    bot_info = await client.get_me()
+    name = user.first_name if user else "there"
+    kb   = _start_keyboard(bot_info.username)
+
+    await client.send_photo(
+        chat_id=query.message.chat.id,
+        photo=image or Config.FORCE_IMAGE,
+        caption=script.START_TXT.format(name),
+        reply_markup=kb,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -143,7 +159,7 @@ async def about_cb(client: Client, query: CallbackQuery):
     await query.message.edit_caption(
         caption=script.ABOUT_TXT.format(me.first_name, me.username),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎥 Movie Website", url="https://mvxy.free.nf")],  # Added source code button
+            [InlineKeyboardButton("📁 Source Code", url="https://github.com/yourusername/your-repo")],
             [InlineKeyboardButton("🔙 Back", callback_data="back_start")]
         ])
     )
