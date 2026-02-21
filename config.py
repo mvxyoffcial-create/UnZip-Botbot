@@ -2,26 +2,26 @@ import os
 
 class Config:
     # ─── Bot Credentials ────────────────────────────────────────────────────────
-    BOT_TOKEN        = os.environ.get("BOT_TOKEN", "")
-    API_ID           = int(os.environ.get("API_ID", 0))
-    API_HASH         = os.environ.get("API_HASH", "")
+    BOT_TOKEN        = "8337890824:AAFj6iqXNSovFQOAWTRAtbblJIlPtcu2IYw"
+    API_ID           = 20288994
+    API_HASH         = "d702614912f1ad370a0d18786002adbf"
 
     # Session string — used for 4 GB uploads via Telegram's user-account limits
-    SESSION_STRING   = os.environ.get("SESSION_STRING", "")
+    SESSION_STRING   = "BQE1leIAQ91QBxeeXOVyv4pFbVCZlK-lwgQCTge8tptNm8H8K3s1LedpPDYDOKhyqkNztGmXMOuBIfwezqN02GRf6NPEEtLI_78tNqvV9Amb_0Iw3FA-cJwYX-AnRYWG_dqTvfNWoA8lIa2GTz3SSsZdu2l8eb4rfQHxCGSsbAy5leT7yJbOWDzCWFA2_iLnEgPoovkmTMuliKmyvAe6feHfaPGCd-pLCpRKSE26S1UzsG0Tw0M1JJZVGqfOrx9_CiREP1oytxPMUVBTAzQNlJn6L1EeYwZ38qQ9kKqw8M3mBysKo6UhzwGbX1eV84Le5DiZAUezBw7CZnWbj1ZVTvBWut2kZQAAAAHjUB8sAA"
 
     # ─── Database ────────────────────────────────────────────────────────────────
-    MONGO_URI        = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-    DATABASE_NAME    = os.environ.get("DATABASE_NAME", "unzipbot")
+    MONGO_URI        = "mongodb+srv://Veggo:zero8907@cluster0.o8sxezg.mongodb.net/?appName=Cluster0"
+    DATABASE_NAME    = "unzipbot"
 
     # ─── Owner / Admins ─────────────────────────────────────────────────────────
-    OWNER_ID         = int(os.environ.get("OWNER_ID", 6332768936))   # @Venuboyy
-    ADMINS           = list(map(int, os.environ.get("ADMINS", str(OWNER_ID)).split()))
+    OWNER_ID         = 8108646188   # @Venuboyy
+    ADMINS           = 8108646188
 
     # ─── Force-subscribe channels ────────────────────────────────────────────────
     FORCE_SUB_CHANNELS = ["zerodev2", "mvxyoffcail"]          # without @
     FORCE_IMAGE        = "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
     # Add separate welcome image (you can use same or different image)
-    WELCOME_IMAGE      = "https://api.aniwallpaper.workers.dev/random?type=boy"
+    WELCOME_IMAGE      = "https://i.ibb.co/Q7bPswdL/img-8108646188.jpg"
 
     # ─── Logs ────────────────────────────────────────────────────────────────────
     LOG_CHANNEL      = int(os.environ.get("LOG_CHANNEL", 0))
@@ -32,7 +32,7 @@ class Config:
     PREMIUM_LIMIT    = 4 * 1024 * 1024 * 1024    # 4 GB
 
     # ─── Download dir ────────────────────────────────────────────────────────────
-    DOWNLOAD_DIR     = os.environ.get("DOWNLOAD_DIR", "/tmp/unzipbot")
+    DOWNLOAD_DIR     = "/tmp/unzipbot"
 
     # ─── Workers ─────────────────────────────────────────────────────────────────
     MAX_WORKERS      = 500
@@ -48,4 +48,4 @@ class Config:
     }
 
     # ─── Web server ──────────────────────────────────────────────────────────────
-    PORT             = int(os.environ.get("PORT", 8080))
+    PORT             = 8080
