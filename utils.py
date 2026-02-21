@@ -9,6 +9,7 @@ from typing import Tuple
 
 from pyrogram import Client
 from pyrogram.errors import UserIsBlocked, InputUserDeactivated, PeerIdInvalid, FloodWait
+from config import Config
 
 log = logging.getLogger(__name__)
 
@@ -82,21 +83,34 @@ async def get_seconds(time_str: str) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Random anime wallpaper
+# Random anime wallpaper for WELCOME message
 # ──────────────────────────────────────────────────────────────────────────────
 async def get_welcome_image() -> str:
+    """
+    Fetches random anime image from API for welcome message.
+    Falls back to Config.WELCOME_IMAGE if API fails.
+    """
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                "https://api.aniwallpaper.workers.dev/random?type=girl",
+                Config.WELCOME_IMAGE,  # Use the URL from config
                 timeout=aiohttp.ClientTimeout(total=8)
             ) as resp:
                 if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("url") or data.get("image") or ""
-    except Exception:
-        pass
-    return "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
+                    # If it's the API URL, parse JSON response
+                    if "api.aniwallpaper" in Config.WELCOME_IMAGE:
+                        data = await resp.json()
+                        image_url = data.get("url") or data.get("image")
+                        if image_url:
+                            return image_url
+                    else:
+                        # If it's a direct image URL, return it
+                        return Config.WELCOME_IMAGE
+    except Exception as e:
+        log.warning(f"Failed to fetch welcome image: {e}")
+    
+    # Fallback to config image
+    return Config.WELCOME_IMAGE
 
 
 # ──────────────────────────────────────────────────────────────────────────────
