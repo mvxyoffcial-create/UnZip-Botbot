@@ -77,14 +77,16 @@ _rename_pending: dict = {}   # user_id → {"msg_id": int, "path": str, "action"
 
 async def _ask_rename(client: Client, message: Message, path: str, action: str):
     uid = message.from_user.id
-    _rename_pending[uid] = {"path": path, "action": action, "orig_msg": message}
+    _rename_pending[uid] = {"path": path, "action": action, "orig_msg": message, "prompt_id": None}
     sent = await message.reply_text(
         script.RENAME_TXT,
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("⏭ Skip", callback_data=f"skip_rename#{uid}")
         ]])
     )
-    _rename_pending[uid]["prompt_id"] = sent.id
+    # Guard: entry may have been popped by a concurrent handler while we were awaiting
+    if uid in _rename_pending:
+        _rename_pending[uid]["prompt_id"] = sent.id
 
 
 @Client.on_callback_query(filters.regex(r"^skip_rename#"))
@@ -116,7 +118,8 @@ async def rename_reply_handler(client: Client, message: Message):
         path = new_path
 
     try:
-        await client.delete_messages(message.chat.id, data["prompt_id"])
+        if data.get("prompt_id"):
+            await client.delete_messages(message.chat.id, data["prompt_id"])
     except Exception:
         pass
     await _process_archive(client, data["orig_msg"], path)
@@ -239,28 +242,29 @@ async def _process_archive(client: Client, message: Message, archive_path: str):
     extract_task = asyncio.get_event_loop().run_in_executor(None, _extract_sync, archive_path, dest_dir)
 
     last_update = 0
+    UPDATE_INTERVAL = 5  # seconds between Telegram edits to avoid FloodWait
     while not extract_task.done():
         await asyncio.sleep(1)
+        now = time.time()
+        if now - last_update < UPDATE_INTERVAL:
+            continue
+        last_update = now
         # Calculate currently extracted size
         extracted_size = 0
-        for root, _, files in os.walk(dest_dir):
-            for f in files:
+        for root, _, fnames in os.walk(dest_dir):
+            for f in fnames:
                 try:
                     extracted_size += os.path.getsize(os.path.join(root, f))
                 except OSError:
                     pass   # file might be locked or just created
-        if total_uncompressed and extracted_size > 0:
-            percent = (extracted_size / total_uncompressed) * 100
-            bar = progress_bar(extracted_size, total_uncompressed)
-            await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
-        else:
-            # Indeterminate animation
-            now = time.time()
-            if now - last_update > 0.5:
-                frames = "|/-\\"
-                idx = int(now * 2) % len(frames)
-                await status.edit(f"📂 Extracting... {frames[idx]}")
-                last_update = now
+        try:
+            if total_uncompressed and extracted_size > 0:
+                bar = progress_bar(extracted_size, total_uncompressed)
+                await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
+            else:
+                await status.edit("📂 Extracting... ⏳")
+        except Exception:
+            pass  # ignore FloodWait / MessageNotModified
 
     try:
         files = extract_task.result()
