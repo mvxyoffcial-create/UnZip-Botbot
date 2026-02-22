@@ -25,14 +25,20 @@ async def info_cmd(client: Client, message: Message):
         first=first, last=last, uid=uid, dc=dc, uname=uname
     )
 
-    # Try to send profile photo
+    # Try to send profile photo with info caption
     try:
-        photos = await client.get_chat_photos(uid, limit=1)
-        photo  = [p async for p in photos]
-        if photo:
-            await message.reply_photo(photo[0].file_id, caption=text)
+        photos = []
+        async for photo in client.get_chat_photos(uid, limit=1):
+            photos.append(photo)
+
+        if photos:
+            await message.reply_photo(
+                photo=photos[0].file_id,
+                caption=text,
+            )
             return
     except Exception:
         pass
 
+    # No profile photo — send as text
     await message.reply_text(text, disable_web_page_preview=True)
