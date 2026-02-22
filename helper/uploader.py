@@ -1,7 +1,3 @@
-"""
-Smart uploader: uses user-session client for files >2 GB, bot client otherwise.
-Fixes thumbnail: Pyrogram requires a LOCAL file path for thumb=, not a file_id.
-"""
 import os
 import mimetypes
 import tempfile
@@ -56,6 +52,7 @@ async def upload_file(
     as_document: bool = False,
     spoiler: bool = False,
     status_msg=None,
+    user_name=None,   # ← accepted but intentionally unused (caller compat)
 ) -> None:
     """Upload a single file, choosing the best available client."""
     size   = os.path.getsize(file_path)
