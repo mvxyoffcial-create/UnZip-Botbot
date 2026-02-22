@@ -45,7 +45,7 @@ def _force_sub_keyboard(channels: list) -> InlineKeyboardMarkup:
 
 async def _send_welcome(client: Client, message: Message, user):
     """Send welcome message as a REPLY to the user's /start command using explicit message id"""
-    image = await get_welcome_image()
+    image = get_welcome_image()
     bot_info = await client.get_me()
     name = user.first_name if user else "there"
     kb   = _start_keyboard(bot_info.username)
