@@ -1,14 +1,14 @@
 import os
 import time
-import math
 import asyncio
 import aiohttp
-import datetime
 import logging
 from typing import Tuple
 
 from pyrogram import Client
 from pyrogram.errors import UserIsBlocked, InputUserDeactivated, PeerIdInvalid, FloodWait
+
+from config import WELCOME_IMAGE
 
 log = logging.getLogger(__name__)
 
@@ -82,23 +82,10 @@ async def get_seconds(time_str: str) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Random anime wallpaper
+# Welcome image — fixed URL from config.py (WELCOME_IMAGE)
 # ──────────────────────────────────────────────────────────────────────────────
-from config import WELCOME_IMAGE
-
 async def get_welcome_image() -> str:
     return WELCOME_IMAGE
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://api.aniwallpaper.workers.dev/random?type=girl",
-                timeout=aiohttp.ClientTimeout(total=8)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("url") or data.get("image") or ""
-    except Exception:
-        pass
-    return "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
