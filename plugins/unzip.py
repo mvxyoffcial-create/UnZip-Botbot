@@ -5,7 +5,7 @@ import os
 import shutil
 import asyncio
 import logging
-import time                       # added for animation
+import time
 from pyrogram import Client, filters
 from pyrogram.types import (
     Message, CallbackQuery,
@@ -14,7 +14,7 @@ from pyrogram.types import (
 from config import Config
 from database import db
 from script import script
-from utils import get_readable_file_size, check_force_sub, temp, progress_bar   # progress_bar already exists
+from utils import get_readable_file_size, check_force_sub, temp
 from helper.extractor import extract_archive, is_archive
 from helper.uploader import upload_file
 from helper.progress import make_progress
@@ -148,6 +148,10 @@ async def file_received(client: Client, message: Message):
     if not await _check_limit(client, message, fsize):
         return
 
+    # Get user info for progress
+    user_name = message.from_user.first_name or "User"
+    user_id = message.from_user.id
+
     # Rename option
     u_data = await db.get_user(uid)
     if u_data and u_data.get("rename", True):
@@ -159,7 +163,7 @@ async def file_received(client: Client, message: Message):
         local = await client.download_media(
             message,
             file_name=dest,
-            progress=make_progress(status, "Downloading"),
+            progress=make_progress(status, "Download", user_name, user_id),
         )
         await status.delete()
         await _ask_rename(client, message, local, "unzip")
@@ -170,10 +174,23 @@ async def file_received(client: Client, message: Message):
         local  = await client.download_media(
             message,
             file_name=dest,
-            progress=make_progress(status, "Downloading"),
+            progress=make_progress(status, "Download", user_name, user_id),
         )
         await status.delete()
         await _process_archive(client, message, local)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Progress bar helper
+# ──────────────────────────────────────────────────────────────────────────────
+def create_progress_bar(current: int, total: int, length: int = 12) -> str:
+    """Create a visual progress bar with filled and empty blocks."""
+    if total <= 0:
+        return "□" * length
+    
+    percentage = min(current / total, 1.0)
+    filled = int(length * percentage)
+    return "■" * filled + "□" * (length - filled)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -208,78 +225,101 @@ async def _get_total_uncompressed(archive_path: str):
 
 def _extract_sync(archive_path: str, dest_dir: str):
     """Synchronous extraction that works with both async and sync extractors."""
-    # First try the async extractor (via asyncio.run) – this preserves original logic
     try:
         import asyncio
         from helper.extractor import extract_archive as async_extract
-        # The original code used a weird lambda; we replicate it here
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        files = loop.run_until_complete(async_extract(archive_path, dest_dir))
+        result = loop.run_until_complete(async_extract(archive_path, dest_dir))
         loop.close()
-        return files
+        return result
     except Exception:
-        # Fallback to synchronous extractor
-        from helper.extractor import extract_archive as sync_extract
-        return sync_extract(archive_path, dest_dir)
+        return extract_archive(archive_path, dest_dir)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Core: extract → show auto-filter (with progress bar)
-# ──────────────────────────────────────────────────────────────────────────────
 async def _process_archive(client: Client, message: Message, archive_path: str):
-    uid      = message.from_user.id
+    uid = message.from_user.id
+    user_name = message.from_user.first_name or "User"
+    
+    status = await message.reply_text("📦 Extracting archive...")
     dest_dir = os.path.join(Config.DOWNLOAD_DIR, str(uid), "extracted")
-    shutil.rmtree(dest_dir, ignore_errors=True)
     os.makedirs(dest_dir, exist_ok=True)
 
-    status = await message.reply_text("📂 Extracting archive...")
+    # Try to get total size
+    total_size = await _get_total_uncompressed(archive_path)
 
-    # Try to get total uncompressed size for progress bar
-    total_uncompressed = await _get_total_uncompressed(archive_path)
+    start_time = time.time()
+    last_update = [0]  # Use list to allow modification in nested function
 
-    # Run extraction in a thread
-    extract_task = asyncio.get_event_loop().run_in_executor(None, _extract_sync, archive_path, dest_dir)
+    async def update_progress():
+        """Periodically update extraction progress."""
+        while True:
+            await asyncio.sleep(2)  # Update every 2 seconds
+            elapsed = time.time() - start_time
+            
+            # Get current extracted size
+            try:
+                current_size = sum(
+                    os.path.getsize(os.path.join(root, f))
+                    for root, _, files in os.walk(dest_dir)
+                    for f in files
+                )
+            except Exception:
+                current_size = 0
 
-    last_update = 0
-    UPDATE_INTERVAL = 5  # seconds between Telegram edits to avoid FloodWait
-    while not extract_task.done():
-        await asyncio.sleep(1)
-        now = time.time()
-        if now - last_update < UPDATE_INTERVAL:
-            continue
-        last_update = now
-        # Calculate currently extracted size
-        extracted_size = 0
-        for root, _, fnames in os.walk(dest_dir):
-            for f in fnames:
-                try:
-                    extracted_size += os.path.getsize(os.path.join(root, f))
-                except OSError:
-                    pass   # file might be locked or just created
-        try:
-            if total_uncompressed and extracted_size > 0:
-                bar = progress_bar(extracted_size, total_uncompressed)
-                await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
+            if total_size and total_size > 0:
+                percent = min((current_size * 100) / total_size, 99.9)
+                bar = create_progress_bar(current_size, total_size, length=12)
+                eta = ((total_size - current_size) / (current_size / elapsed)) if current_size > 0 else 0
+                
+                text = (
+                    f"<code>[{bar}] {percent:.1f}%</code>\n"
+                    f"<b>┠ Processed:</b> <code>{get_readable_file_size(current_size)}</code> of <code>{get_readable_file_size(total_size)}</code>\n"
+                    f"<b>┠ Status:</b> <code>Extracting</code> | ETA: <code>{int(eta)}s</code>\n"
+                    f"<b>┠ Speed:</b> <code>{get_readable_file_size(int(current_size / elapsed))}/s</code> | Elapsed: <code>{int(elapsed)}s</code>\n"
+                    f"<b>┠ Engine:</b> <code>Archive Extractor</code>\n"
+                    f"<b>┠ User:</b> <code>{user_name}</code> | ID: <code>{uid}</code>\n"
+                    f"<b>┖</b>"
+                )
             else:
-                await status.edit("📂 Extracting... ⏳")
-        except Exception:
-            pass  # ignore FloodWait / MessageNotModified
+                # No total size available, show indeterminate progress
+                bar = "■" * (int(elapsed) % 12) + "□" * (12 - (int(elapsed) % 12))
+                text = (
+                    f"<code>[{bar}] Processing...</code>\n"
+                    f"<b>┠ Extracted:</b> <code>{get_readable_file_size(current_size)}</code>\n"
+                    f"<b>┠ Status:</b> <code>Extracting</code>\n"
+                    f"<b>┠ Speed:</b> <code>{get_readable_file_size(int(current_size / elapsed))}/s</code> | Elapsed: <code>{int(elapsed)}s</code>\n"
+                    f"<b>┠ Engine:</b> <code>Archive Extractor</code>\n"
+                    f"<b>┠ User:</b> <code>{user_name}</code> | ID: <code>{uid}</code>\n"
+                    f"<b>┖</b>"
+                )
+
+            try:
+                await status.edit(text, disable_web_page_preview=True)
+            except Exception:
+                pass
+
+    # Start progress updater task
+    progress_task = asyncio.create_task(update_progress())
 
     try:
-        files = extract_task.result()
+        # Run extraction in thread pool to not block event loop
+        loop = asyncio.get_event_loop()
+        files = await loop.run_in_executor(None, _extract_sync, archive_path, dest_dir)
     except Exception as e:
+        progress_task.cancel()
         await status.edit(f"❌ Extraction failed!\n`{e}`")
         shutil.rmtree(dest_dir, ignore_errors=True)
+        os.remove(archive_path)
         return
+    finally:
+        progress_task.cancel()
+        try:
+            await progress_task
+        except asyncio.CancelledError:
+            pass
 
-    # Extraction done – show 100% if we had a total
-    if total_uncompressed:
-        bar = progress_bar(total_uncompressed, total_uncompressed)
-        await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
-    else:
-        await status.edit("📂 Extraction complete.")
-
+    # Cleanup archive
     try:
         os.remove(archive_path)
     except Exception:
@@ -405,6 +445,9 @@ async def upload_selected_cb(client: Client, query: CallbackQuery):
     spoiler  = u_data.get("spoiler", False) if u_data else False
     as_doc   = u_data.get("as_document", False) if u_data else False
 
+    # Get user info for progress
+    user_name = query.from_user.first_name or "User"
+
     for i in selected:
         fpath = sess["files"][i]
         fname = os.path.basename(fpath)
@@ -419,6 +462,8 @@ async def upload_selected_cb(client: Client, query: CallbackQuery):
                 as_document=as_doc,
                 spoiler=spoiler,
                 status_msg=status,
+                user_name=user_name,
+                user_id=uid,
             )
             await status.delete()
         except Exception as e:
@@ -438,6 +483,7 @@ async def url_download(client: Client, message: Message):
 
     url = message.text.strip()
     uid = message.from_user.id
+    user_name = message.from_user.first_name or "User"
     u_data = await db.get_user(uid)
 
     status = await message.reply_text("⬇️ Downloading from URL...")
@@ -445,21 +491,28 @@ async def url_download(client: Client, message: Message):
     os.makedirs(dest, exist_ok=True)
 
     from utils import download_url
-    from helper.progress import make_progress as _mp
 
     async def _prog(done, total, speed, eta):
-        from utils import get_readable_file_size, get_readable_time, progress_bar
-        bar = progress_bar(done, total)
+        bar = create_progress_bar(done, total, length=12)
+        elapsed = time.time() - _prog.start_time
+        percent = (done * 100) / total if total > 0 else 0
+        
+        text = (
+            f"<code>[{bar}] {percent:.1f}%</code>\n"
+            f"<b>┠ Processed:</b> <code>{get_readable_file_size(done)}</code> of <code>{get_readable_file_size(total)}</code>\n"
+            f"<b>┠ Status:</b> <code>Download</code> | ETA: <code>{int(eta)}s</code>\n"
+            f"<b>┠ Speed:</b> <code>{get_readable_file_size(int(speed))}/s</code> | Elapsed: <code>{int(elapsed)}s</code>\n"
+            f"<b>┠ Engine:</b> <code>Direct URL</code>\n"
+            f"<b>┠ User:</b> <code>{user_name}</code> | ID: <code>{uid}</code>\n"
+            f"<b>┖</b>"
+        )
+        
         try:
-            await status.edit(
-                f"⬇️ <b>Downloading...</b>\n<code>{bar}</code>\n\n"
-                f"📁 <b>Total :</b> <code>{get_readable_file_size(total)}</code>\n"
-                f"📥 <b>Done :</b> <code>{get_readable_file_size(done)}</code>\n"
-                f"⚡ <b>Speed :</b> <code>{get_readable_file_size(int(speed))}/s</code>\n"
-                f"⏳ <b>Remaining :</b> <code>{get_readable_time(eta)}</code>"
-            )
+            await status.edit(text, disable_web_page_preview=True)
         except Exception:
             pass
+
+    _prog.start_time = time.time()
 
     try:
         local = await download_url(url, dest, _prog)
@@ -495,6 +548,8 @@ async def url_download(client: Client, message: Message):
                     as_document=as_doc,
                     spoiler=spoiler,
                     status_msg=status,
+                    user_name=user_name,
+                    user_id=uid,
                 )
                 await status.delete()
                 os.remove(local)
