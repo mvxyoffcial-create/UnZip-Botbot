@@ -20,12 +20,6 @@ TIMEZONES = ["Asia/Kolkata", "UTC", "US/Eastern", "US/Pacific", "Europe/London",
 THUMB_DIR = os.path.join(Config.DOWNLOAD_DIR, "thumbnails")
 os.makedirs(THUMB_DIR, exist_ok=True)
 
-# Directory to store screenshots
-SCREENSHOT_DIR = os.path.join(Config.DOWNLOAD_DIR, "screenshots")
-os.makedirs(SCREENSHOT_DIR, exist_ok=True)
-
-SCREENSHOT_COUNT = 10   # Number of screenshots to capture
-
 
 def _on_off(val: bool) -> str:
     return "✅ ON" if val else "❌ OFF"
@@ -47,8 +41,6 @@ async def _settings_keyboard(uid: int) -> InlineKeyboardMarkup:
                               callback_data="toggle_rename")],
         [InlineKeyboardButton(f"📄 Upload as Document — {_on_off(u.get('as_document', False))}",
                               callback_data="toggle_doc")],
-        [InlineKeyboardButton(f"📸 Receive Screenshots — {_on_off(u.get('screenshots', True))}",
-                              callback_data="toggle_screenshots")],
         [InlineKeyboardButton(f"🤖 Bot Updates — {_on_off(u.get('bot_updates', True))}",
                               callback_data="toggle_updates")],
         [
@@ -98,9 +90,6 @@ async def toggle_rename(c, q): await _toggle_and_refresh(c, q, "rename")
 
 @Client.on_callback_query(filters.regex("^toggle_doc$"))
 async def toggle_doc(c, q): await _toggle_and_refresh(c, q, "as_document")
-
-@Client.on_callback_query(filters.regex("^toggle_screenshots$"))
-async def toggle_screenshots(c, q): await _toggle_and_refresh(c, q, "screenshots")
 
 @Client.on_callback_query(filters.regex("^toggle_updates$"))
 async def toggle_updates(c, q): await _toggle_and_refresh(c, q, "bot_updates")
@@ -194,186 +183,6 @@ async def photo_received(client: Client, message: Message):
         except Exception as e:
             log.error(f"Error saving thumbnail for user {uid}: {e}")
             await status_msg.edit_text(f"❌ Error: {str(e)}")
-
-
-# ── Screenshot ───────────────────────────────────────────────────────────────
-
-def _get_video_duration(video_path: str) -> float:
-    """Use ffprobe to get video duration in seconds."""
-    result = subprocess.run(
-        [
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path,
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    try:
-        return float(result.stdout.strip())
-    except ValueError:
-        return 0.0
-
-
-def _take_screenshots(video_path: str, out_dir: str, count: int = SCREENSHOT_COUNT) -> list[str]:
-    """
-    Extract `count` evenly-spaced screenshots from the video using ffmpeg.
-    Returns a list of saved image paths.
-    """
-    duration = _get_video_duration(video_path)
-    if duration <= 0:
-        raise ValueError("Could not determine video duration.")
-
-    # Space screenshots evenly, avoiding the very start/end
-    interval = duration / (count + 1)
-    paths = []
-
-    for i in range(1, count + 1):
-        timestamp = interval * i
-        out_path  = os.path.join(out_dir, f"screenshot_{i:02d}.jpg")
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(timestamp),
-            "-i", video_path,
-            "-vframes", "1",
-            "-q:v", "2",          # high quality JPEG
-            out_path,
-        ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode == 0 and os.path.exists(out_path):
-            paths.append(out_path)
-        else:
-            log.warning(f"ffmpeg failed for screenshot {i}: {result.stderr.decode()[-200:]}")
-
-    return paths
-
-
-@Client.on_message(filters.command("screenshot") & filters.private)
-async def screenshot_cmd(client: Client, message: Message):
-    """
-    Reply to a video message with /screenshot to get 10 evenly-spaced screenshots.
-    Only works for video files — documents and audio are rejected.
-    """
-    uid    = message.from_user.id
-    reply  = message.reply_to_message
-
-    # ── Guard: must reply to a video ────────────────────────────────────────
-    if not reply:
-        return await message.reply_text(
-            "📽️ **How to use:**\n"
-            "Reply to a **video** message with /screenshot\n\n"
-            "ℹ️ This command only works for videos."
-        )
-
-    is_video = bool(reply.video)
-    # Also accept video sent as document (mp4/mkv files sent without compression)
-    is_video_doc = (
-        reply.document
-        and reply.document.mime_type
-        and reply.document.mime_type.startswith("video/")
-    )
-
-    if not (is_video or is_video_doc):
-        return await message.reply_text(
-            "❌ **Videos only!**\n\n"
-            "Please reply to a **video** message.\n"
-            "This command does not work for photos, audio, or other files."
-        )
-
-    media    = reply.video or reply.document
-    fname    = media.file_name or "video"
-    fsize    = media.file_size or 0
-
-    status = await message.reply_text(
-        f"⬇️ Downloading video to generate screenshots...\n"
-        f"📁 **File:** `{fname}`"
-    )
-
-    # ── Download ─────────────────────────────────────────────────────────────
-    dl_dir  = os.path.join(Config.DOWNLOAD_DIR, str(uid), "screenshot_input")
-    out_dir = os.path.join(SCREENSHOT_DIR, str(uid))
-    os.makedirs(dl_dir, exist_ok=True)
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Clean old screenshots for this user
-    for f in os.listdir(out_dir):
-        try:
-            os.remove(os.path.join(out_dir, f))
-        except Exception:
-            pass
-
-    try:
-        local_path = await client.download_media(
-            reply,
-            file_name=os.path.join(dl_dir, fname),
-        )
-    except Exception as e:
-        return await status.edit(f"❌ Download failed!\n`{e}`")
-
-    await status.edit(f"🎬 Taking {SCREENSHOT_COUNT} screenshots... please wait.")
-
-    # ── Extract screenshots in thread (blocking ffmpeg calls) ─────────────
-    loop = asyncio.get_event_loop()
-    try:
-        shot_paths = await loop.run_in_executor(
-            None,
-            lambda: _take_screenshots(local_path, out_dir, SCREENSHOT_COUNT)
-        )
-    except Exception as e:
-        await status.edit(f"❌ Screenshot extraction failed!\n`{e}`")
-        try:
-            os.remove(local_path)
-        except Exception:
-            pass
-        return
-
-    # Cleanup downloaded video
-    try:
-        os.remove(local_path)
-    except Exception:
-        pass
-
-    if not shot_paths:
-        return await status.edit("❌ No screenshots could be generated. Is the file a valid video?")
-
-    await status.edit(f"📤 Sending {len(shot_paths)} screenshots...")
-
-    # ── Send as media group (max 10 per group) ────────────────────────────
-    from pyrogram.types import InputMediaPhoto
-
-    media_group = [
-        InputMediaPhoto(
-            media=p,
-            caption=f"🎬 Screenshot {i+1}/{len(shot_paths)}" if i == 0 else ""
-        )
-        for i, p in enumerate(shot_paths)
-    ]
-
-    try:
-        await client.send_media_group(message.chat.id, media_group)
-        await status.edit(f"✅ Done! Sent **{len(shot_paths)} screenshots**.")
-    except Exception as e:
-        log.error(f"Error sending screenshots: {e}")
-        # Fallback: send one by one
-        await status.edit(f"📤 Sending screenshots one by one...")
-        for i, path in enumerate(shot_paths, 1):
-            try:
-                await client.send_photo(
-                    message.chat.id,
-                    path,
-                    caption=f"🎬 Screenshot {i}/{len(shot_paths)}"
-                )
-            except Exception as ex:
-                log.warning(f"Failed to send screenshot {i}: {ex}")
-        await status.edit(f"✅ Done! Sent **{len(shot_paths)} screenshots**.")
-
-    # Cleanup screenshots
-    for p in shot_paths:
-        try:
-            os.remove(p)
-        except Exception:
-            pass
 
 
 # ── Timezone ─────────────────────────────────────────────────────────────────
