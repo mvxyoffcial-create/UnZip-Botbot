@@ -7,6 +7,8 @@ import zipfile
 import tarfile
 import shutil
 import logging
+import subprocess
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -23,12 +25,14 @@ def _7z_available() -> bool:
     return shutil.which("7z") is not None
 
 
-async def extract_archive(archive_path: str, dest_dir: str) -> list:
+def extract_archive(archive_path: str, dest_dir: str) -> list:
     """
     Extract archive_path into dest_dir.
     Returns sorted list of extracted absolute file paths.
     """
     os.makedirs(dest_dir, exist_ok=True)
+    archive_path = os.path.abspath(archive_path)
+    dest_dir = os.path.abspath(dest_dir)
     ext = archive_path.lower()
 
     try:
@@ -38,7 +42,7 @@ async def extract_archive(archive_path: str, dest_dir: str) -> list:
 
         elif ext.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")):
             with tarfile.open(archive_path) as tf:
-                tf.extractall(dest_dir)
+                tf.extractall(dest_dir, filter='data')
 
         elif ext.endswith(".rar"):
             if _rar_available():
@@ -46,32 +50,48 @@ async def extract_archive(archive_path: str, dest_dir: str) -> list:
                 with rarfile.RarFile(archive_path) as rf:
                     rf.extractall(dest_dir)
             elif _7z_available():
-                os.system(f'7z x "{archive_path}" -o"{dest_dir}" -y')
+                result = subprocess.run(
+                    ["7z", "x", archive_path, f"-o{dest_dir}", "-y"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
             else:
                 raise RuntimeError("RAR support unavailable. Install rarfile or 7z.")
 
         elif ext.endswith(".7z"):
             if _7z_available():
-                os.system(f'7z x "{archive_path}" -o"{dest_dir}" -y')
+                result = subprocess.run(
+                    ["7z", "x", archive_path, f"-o{dest_dir}", "-y"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
             else:
                 raise RuntimeError("7z binary not found. Install p7zip-full.")
 
         else:
             # Try 7z as fallback
             if _7z_available():
-                os.system(f'7z x "{archive_path}" -o"{dest_dir}" -y')
+                result = subprocess.run(
+                    ["7z", "x", archive_path, f"-o{dest_dir}", "-y"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
             else:
                 raise RuntimeError(f"Unsupported archive format: {archive_path}")
 
+    except subprocess.CalledProcessError as e:
+        log.exception(f"7z extraction failed: {e.stderr}")
+        raise RuntimeError(f"Extraction failed: {e.stderr}")
     except Exception as e:
         log.exception(f"Extraction failed: {e}")
         raise
 
-    extracted = []
-    for root, dirs, files in os.walk(dest_dir):
-        for f in sorted(files):
-            extracted.append(os.path.join(root, f))
-    return sorted(extracted)
+    # Fast file collection using Path.rglob()
+    extracted = [str(p) for p in sorted(Path(dest_dir).rglob("*")) if p.is_file()]
+    return extracted
 
 
 def is_archive(filename: str) -> bool:
