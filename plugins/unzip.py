@@ -5,9 +5,7 @@ import os
 import shutil
 import asyncio
 import logging
-import zipfile
-import tarfile
-import time
+import time                       # added for animation
 from pyrogram import Client, filters
 from pyrogram.types import (
     Message, CallbackQuery,
@@ -16,7 +14,7 @@ from pyrogram.types import (
 from config import Config
 from database import db
 from script import script
-from utils import get_readable_file_size, check_force_sub, temp
+from utils import get_readable_file_size, check_force_sub, temp, progress_bar   # progress_bar already exists
 from helper.extractor import extract_archive, is_archive
 from helper.uploader import upload_file
 from helper.progress import make_progress
@@ -176,122 +174,55 @@ async def file_received(client: Client, message: Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Progress bar helper for extraction
+# Extraction helpers with progress bar
 # ──────────────────────────────────────────────────────────────────────────────
-def _extraction_progress_bar(done: int, total: int, length: int = 10) -> str:
-    """Build a visual progress bar string."""
-    if total == 0:
-        return "▓" * length
-    filled = int(length * done / total)
-    empty  = length - filled
-    pct    = int(100 * done / total)
-    bar    = "▓" * filled + "░" * empty
-    return f"[{bar}] {pct}%"
+
+async def _get_total_uncompressed(archive_path: str):
+    """Try to obtain total uncompressed size of all files inside the archive."""
+    ext = os.path.splitext(archive_path)[1].lower()
+    total = None
+    try:
+        if ext == '.zip':
+            import zipfile
+            with zipfile.ZipFile(archive_path, 'r') as z:
+                total = sum(f.file_size for f in z.infolist())
+        elif ext in ('.rar', '.cbr'):
+            import rarfile
+            with rarfile.RarFile(archive_path, 'r') as r:
+                total = sum(f.file_size for f in r.infolist())
+        elif ext in ('.7z', '.cb7'):
+            import py7zr
+            with py7zr.SevenZipFile(archive_path, 'r') as sz:
+                total = sum(f.uncompressed for f in sz.list())
+        elif ext in ('.tar', '.tgz', '.tar.gz', '.tbz2', '.tar.bz2', '.txz', '.tar.xz'):
+            import tarfile
+            with tarfile.open(archive_path, 'r') as tar:
+                total = sum(f.size for f in tar.getmembers() if f.isfile())
+    except Exception as e:
+        log.debug(f"Could not get uncompressed size: {e}")
+    return total
 
 
-async def _extract_with_progress(archive_path: str, dest_dir: str, status_msg) -> list:
-    """
-    Extract archive while updating status_msg with a real-time progress bar.
-    Supports ZIP and TAR families natively; falls back to extract_archive for others.
-    Returns list of extracted file paths.
-    """
-    lower = archive_path.lower()
-    extracted_files = []
-    last_edit = 0.0
-
-    async def _update(current: int, total: int, current_file: str = ""):
-        nonlocal last_edit
-        now = time.monotonic()
-        if now - last_edit < 1.5:   # throttle Telegram edits to every 1.5 s
-            return
-        last_edit = now
-        bar  = _extraction_progress_bar(current, total)
-        size_done = get_readable_file_size(current)
-        size_total = get_readable_file_size(total)
-        fname_line = f"\n📄 <code>{os.path.basename(current_file)}</code>" if current_file else ""
-        try:
-            await status_msg.edit(
-                f"📂 <b>Extracting archive...</b>\n"
-                f"<code>{bar}</code>\n\n"
-                f"📦 <b>Files extracted :</b> <code>{current} / {total}</code>"
-                f"{fname_line}"
-            )
-        except Exception:
-            pass
-
-    # ── ZIP ──────────────────────────────────────────────────────────────────
-    if lower.endswith(".zip"):
-        def _do_zip():
-            with zipfile.ZipFile(archive_path, "r") as zf:
-                members = zf.infolist()
-                total   = len(members)
-                paths   = []
-                for idx, member in enumerate(members, 1):
-                    zf.extract(member, dest_dir)
-                    full = os.path.join(dest_dir, member.filename)
-                    if not member.is_dir():
-                        paths.append(full)
-                    # Schedule coroutine from sync thread
-                    asyncio.run_coroutine_threadsafe(
-                        _update(idx, total, member.filename),
-                        asyncio.get_event_loop()
-                    )
-                return paths
-
-        loop = asyncio.get_event_loop()
-        extracted_files = await loop.run_in_executor(None, _do_zip)
-
-    # ── TAR family ───────────────────────────────────────────────────────────
-    elif tarfile.is_tarfile(archive_path):
-        def _do_tar():
-            with tarfile.open(archive_path, "r:*") as tf:
-                members = tf.getmembers()
-                total   = len(members)
-                paths   = []
-                for idx, member in enumerate(members, 1):
-                    tf.extract(member, dest_dir)
-                    if member.isfile():
-                        paths.append(os.path.join(dest_dir, member.name))
-                    asyncio.run_coroutine_threadsafe(
-                        _update(idx, total, member.name),
-                        asyncio.get_event_loop()
-                    )
-                return paths
-
-        loop = asyncio.get_event_loop()
-        extracted_files = await loop.run_in_executor(None, _do_tar)
-
-    # ── Fallback (RAR, 7Z, …) ────────────────────────────────────────────────
-    else:
-        # Show indeterminate spinner while extracting unsupported formats
-        async def _spinner():
-            frames = ["◐", "◓", "◑", "◒"]
-            i = 0
-            while True:
-                try:
-                    await status_msg.edit(
-                        f"📂 <b>Extracting archive...</b>  {frames[i % 4]}\n"
-                        f"<i>Please wait...</i>"
-                    )
-                except Exception:
-                    pass
-                await asyncio.sleep(2)
-                i += 1
-
-        spinner_task = asyncio.create_task(_spinner())
-        try:
-            loop = asyncio.get_event_loop()
-            extracted_files = await loop.run_in_executor(
-                None, lambda: extract_archive(archive_path, dest_dir)
-            )
-        finally:
-            spinner_task.cancel()
-
-    return extracted_files
+def _extract_sync(archive_path: str, dest_dir: str):
+    """Synchronous extraction that works with both async and sync extractors."""
+    # First try the async extractor (via asyncio.run) – this preserves original logic
+    try:
+        import asyncio
+        from helper.extractor import extract_archive as async_extract
+        # The original code used a weird lambda; we replicate it here
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        files = loop.run_until_complete(async_extract(archive_path, dest_dir))
+        loop.close()
+        return files
+    except Exception:
+        # Fallback to synchronous extractor
+        from helper.extractor import extract_archive as sync_extract
+        return sync_extract(archive_path, dest_dir)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Core: extract → show auto-filter
+# Core: extract → show auto-filter (with progress bar)
 # ──────────────────────────────────────────────────────────────────────────────
 async def _process_archive(client: Client, message: Message, archive_path: str):
     uid      = message.from_user.id
@@ -300,11 +231,50 @@ async def _process_archive(client: Client, message: Message, archive_path: str):
     os.makedirs(dest_dir, exist_ok=True)
 
     status = await message.reply_text("📂 Extracting archive...")
+
+    # Try to get total uncompressed size for progress bar
+    total_uncompressed = await _get_total_uncompressed(archive_path)
+
+    # Run extraction in a thread
+    extract_task = asyncio.get_event_loop().run_in_executor(None, _extract_sync, archive_path, dest_dir)
+
+    last_update = 0
+    while not extract_task.done():
+        await asyncio.sleep(1)
+        # Calculate currently extracted size
+        extracted_size = 0
+        for root, _, files in os.walk(dest_dir):
+            for f in files:
+                try:
+                    extracted_size += os.path.getsize(os.path.join(root, f))
+                except OSError:
+                    pass   # file might be locked or just created
+        if total_uncompressed and extracted_size > 0:
+            percent = (extracted_size / total_uncompressed) * 100
+            bar = progress_bar(extracted_size, total_uncompressed)
+            await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
+        else:
+            # Indeterminate animation
+            now = time.time()
+            if now - last_update > 0.5:
+                frames = "|/-\\"
+                idx = int(now * 2) % len(frames)
+                await status.edit(f"📂 Extracting... {frames[idx]}")
+                last_update = now
+
     try:
-        files = await _extract_with_progress(archive_path, dest_dir, status)
+        files = extract_task.result()
     except Exception as e:
         await status.edit(f"❌ Extraction failed!\n`{e}`")
+        shutil.rmtree(dest_dir, ignore_errors=True)
         return
+
+    # Extraction done – show 100% if we had a total
+    if total_uncompressed:
+        bar = progress_bar(total_uncompressed, total_uncompressed)
+        await status.edit(f"📂 Extracting...\n<code>{bar}</code>")
+    else:
+        await status.edit("📂 Extraction complete.")
 
     try:
         os.remove(archive_path)
@@ -313,6 +283,7 @@ async def _process_archive(client: Client, message: Message, archive_path: str):
 
     if not files:
         await status.edit("❌ Archive is empty or extraction failed.")
+        shutil.rmtree(dest_dir, ignore_errors=True)
         return
 
     # Store session
