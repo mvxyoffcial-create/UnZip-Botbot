@@ -5,6 +5,9 @@ import os
 import shutil
 import asyncio
 import logging
+import zipfile
+import tarfile
+import time
 from pyrogram import Client, filters
 from pyrogram.types import (
     Message, CallbackQuery,
@@ -173,6 +176,121 @@ async def file_received(client: Client, message: Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Progress bar helper for extraction
+# ──────────────────────────────────────────────────────────────────────────────
+def _extraction_progress_bar(done: int, total: int, length: int = 10) -> str:
+    """Build a visual progress bar string."""
+    if total == 0:
+        return "▓" * length
+    filled = int(length * done / total)
+    empty  = length - filled
+    pct    = int(100 * done / total)
+    bar    = "▓" * filled + "░" * empty
+    return f"[{bar}] {pct}%"
+
+
+async def _extract_with_progress(archive_path: str, dest_dir: str, status_msg) -> list:
+    """
+    Extract archive while updating status_msg with a real-time progress bar.
+    Supports ZIP and TAR families natively; falls back to extract_archive for others.
+    Returns list of extracted file paths.
+    """
+    lower = archive_path.lower()
+    extracted_files = []
+    last_edit = 0.0
+
+    async def _update(current: int, total: int, current_file: str = ""):
+        nonlocal last_edit
+        now = time.monotonic()
+        if now - last_edit < 1.5:   # throttle Telegram edits to every 1.5 s
+            return
+        last_edit = now
+        bar  = _extraction_progress_bar(current, total)
+        size_done = get_readable_file_size(current)
+        size_total = get_readable_file_size(total)
+        fname_line = f"\n📄 <code>{os.path.basename(current_file)}</code>" if current_file else ""
+        try:
+            await status_msg.edit(
+                f"📂 <b>Extracting archive...</b>\n"
+                f"<code>{bar}</code>\n\n"
+                f"📦 <b>Files extracted :</b> <code>{current} / {total}</code>"
+                f"{fname_line}"
+            )
+        except Exception:
+            pass
+
+    # ── ZIP ──────────────────────────────────────────────────────────────────
+    if lower.endswith(".zip"):
+        def _do_zip():
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                members = zf.infolist()
+                total   = len(members)
+                paths   = []
+                for idx, member in enumerate(members, 1):
+                    zf.extract(member, dest_dir)
+                    full = os.path.join(dest_dir, member.filename)
+                    if not member.is_dir():
+                        paths.append(full)
+                    # Schedule coroutine from sync thread
+                    asyncio.run_coroutine_threadsafe(
+                        _update(idx, total, member.filename),
+                        asyncio.get_event_loop()
+                    )
+                return paths
+
+        loop = asyncio.get_event_loop()
+        extracted_files = await loop.run_in_executor(None, _do_zip)
+
+    # ── TAR family ───────────────────────────────────────────────────────────
+    elif tarfile.is_tarfile(archive_path):
+        def _do_tar():
+            with tarfile.open(archive_path, "r:*") as tf:
+                members = tf.getmembers()
+                total   = len(members)
+                paths   = []
+                for idx, member in enumerate(members, 1):
+                    tf.extract(member, dest_dir)
+                    if member.isfile():
+                        paths.append(os.path.join(dest_dir, member.name))
+                    asyncio.run_coroutine_threadsafe(
+                        _update(idx, total, member.name),
+                        asyncio.get_event_loop()
+                    )
+                return paths
+
+        loop = asyncio.get_event_loop()
+        extracted_files = await loop.run_in_executor(None, _do_tar)
+
+    # ── Fallback (RAR, 7Z, …) ────────────────────────────────────────────────
+    else:
+        # Show indeterminate spinner while extracting unsupported formats
+        async def _spinner():
+            frames = ["◐", "◓", "◑", "◒"]
+            i = 0
+            while True:
+                try:
+                    await status_msg.edit(
+                        f"📂 <b>Extracting archive...</b>  {frames[i % 4]}\n"
+                        f"<i>Please wait...</i>"
+                    )
+                except Exception:
+                    pass
+                await asyncio.sleep(2)
+                i += 1
+
+        spinner_task = asyncio.create_task(_spinner())
+        try:
+            loop = asyncio.get_event_loop()
+            extracted_files = await loop.run_in_executor(
+                None, lambda: extract_archive(archive_path, dest_dir)
+            )
+        finally:
+            spinner_task.cancel()
+
+    return extracted_files
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Core: extract → show auto-filter
 # ──────────────────────────────────────────────────────────────────────────────
 async def _process_archive(client: Client, message: Message, archive_path: str):
@@ -183,20 +301,10 @@ async def _process_archive(client: Client, message: Message, archive_path: str):
 
     status = await message.reply_text("📂 Extracting archive...")
     try:
-        files = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: __import__("asyncio").run(
-                __builtins__["__import__"]("helper.extractor", fromlist=["extract_archive"])
-                .extract_archive(archive_path, dest_dir)
-            )
-        )
-    except Exception:
-        # Sync fallback
-        from helper.extractor import extract_archive as _ea
-        try:
-            files = _ea(archive_path, dest_dir)
-        except Exception as e:
-            await status.edit(f"❌ Extraction failed!\n`{e}`")
-            return
+        files = await _extract_with_progress(archive_path, dest_dir, status)
+    except Exception as e:
+        await status.edit(f"❌ Extraction failed!\n`{e}`")
+        return
 
     try:
         os.remove(archive_path)
