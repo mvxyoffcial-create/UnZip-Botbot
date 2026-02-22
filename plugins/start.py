@@ -1,5 +1,4 @@
 import asyncio
-import aiohttp
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import (
@@ -45,17 +44,20 @@ def _force_sub_keyboard(channels: list) -> InlineKeyboardMarkup:
 
 
 async def _send_welcome(client: Client, message: Message, user):
-    """Send welcome message as a REPLY to the user's /start command"""
+    """Send welcome message as a REPLY to the user's /start command using explicit message id"""
     image = await get_welcome_image()
     bot_info = await client.get_me()
     name = user.first_name if user else "there"
     kb   = _start_keyboard(bot_info.username)
 
-    # Reply to the original /start message
-    await message.reply_photo(
+    # Use explicit reply_to_message_id so it always replies to /start
+    # even after sticker is deleted
+    await client.send_photo(
+        chat_id=message.chat.id,
         photo=image or Config.FORCE_IMAGE,
         caption=script.START_TXT.format(name),
         reply_markup=kb,
+        reply_to_message_id=message.id,
     )
 
 
@@ -87,15 +89,19 @@ async def start_private(client: Client, message: Message):
             reply_markup=_force_sub_keyboard(missing),
         )
 
-    # Sticker → 2s → delete → welcome image as REPLY
+    # Sticker → 2s → delete → welcome image as REPLY to /start
     try:
-        stk = await message.reply_sticker(Config.START_STICKER)
+        stk = await client.send_photo(
+            chat_id=message.chat.id,
+            photo=Config.START_STICKER,
+            reply_to_message_id=message.id,
+        )
         await asyncio.sleep(2)
         await stk.delete()
     except Exception:
         pass
 
-    # Send welcome as a reply to /start message
+    # Send welcome as a reply to /start message (explicit message id)
     await _send_welcome(client, message, user)
 
 
@@ -122,11 +128,11 @@ async def check_sub_cb(client: Client, query: CallbackQuery):
     if missing:
         await query.answer("❌ You haven't joined all channels yet!", show_alert=True)
         return
-    
+
     # Delete force subscribe message
     await query.message.delete()
-    
-    # Send welcome as a NEW message (since we can't reply to deleted message)
+
+    # Send welcome as a new message
     image = await get_welcome_image()
     bot_info = await client.get_me()
     name = user.first_name if user else "there"
