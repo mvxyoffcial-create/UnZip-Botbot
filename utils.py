@@ -9,7 +9,6 @@ from typing import Tuple
 
 from pyrogram import Client
 from pyrogram.errors import UserIsBlocked, InputUserDeactivated, PeerIdInvalid, FloodWait
-from config import Config
 
 log = logging.getLogger(__name__)
 
@@ -83,35 +82,23 @@ async def get_seconds(time_str: str) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Random anime wallpaper for WELCOME message
+# Random anime wallpaper
 # ──────────────────────────────────────────────────────────────────────────────
+from config import WELCOME_IMAGE
+
 async def get_welcome_image() -> str:
-    """
-    Fetches random anime image from API for welcome message.
-    The API returns a direct image (JPEG), not JSON.
-    Falls back to Config.FORCE_IMAGE if API fails.
-    """
-    try:
-        # Check if WELCOME_IMAGE is an API endpoint or direct image
-        if "api.aniwallpaper" in Config.WELCOME_IMAGE:
-            # It's an API - fetch and return the redirected URL
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    Config.WELCOME_IMAGE,
-                    timeout=aiohttp.ClientTimeout(total=8),
-                    allow_redirects=True
-                ) as resp:
-                    if resp.status == 200:
-                        # Return the final URL after redirect (actual image URL)
-                        return str(resp.url)
-        else:
-            # It's already a direct image URL
-            return Config.WELCOME_IMAGE
-    except Exception as e:
-        log.warning(f"Failed to fetch welcome image: {e}")
-    
-    # Fallback to force image if API fails
-    return Config.FORCE_IMAGE
+    return WELCOME_IMAGE
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://api.aniwallpaper.workers.dev/random?type=girl",
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("url") or data.get("image") or ""
+    except Exception:
+        pass
+    return "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
