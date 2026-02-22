@@ -61,8 +61,25 @@ def get_readable_time(seconds: float) -> str:
     return " ".join(parts)
 
 
-def progress_bar(current: int, total: int, length: int = 20) -> str:
-    """Generate a progress bar string."""
+def progress_bar(current: int, total: int, length: int = 12) -> str:
+    """
+    Generate a stylish progress bar string with filled and empty blocks.
+    Uses ■ for filled and □ for empty.
+    Default length is 12 to match the new format.
+    """
+    if total <= 0:
+        return "□" * length
+    
+    percentage = min(current / total, 1.0)  # Cap at 100%
+    filled = int(length * percentage)
+    return "■" * filled + "□" * (length - filled)
+
+
+def progress_bar_old(current: int, total: int, length: int = 20) -> str:
+    """
+    Legacy progress bar with █ and ░ characters.
+    Kept for backward compatibility.
+    """
     if total <= 0:
         return "░" * length
     
@@ -251,3 +268,50 @@ async def download_url(url: str, dest: str, progress_callback=None) -> str:
             raise
 
     return local_path
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Formatted progress text generator (new stylish format)
+# ──────────────────────────────────────────────────────────────────────────────
+def get_progress_text(
+    current: int,
+    total: int,
+    speed: float,
+    eta: float,
+    status: str = "Processing",
+    engine: str = "System",
+    user_name: str = "User",
+    user_id: int = 0,
+    elapsed: float = 0
+) -> str:
+    """
+    Generate stylish progress text in the new format.
+    
+    Args:
+        current: Current progress in bytes
+        total: Total size in bytes
+        speed: Speed in bytes/second
+        eta: Estimated time remaining in seconds
+        status: Status text (e.g., "Download", "Upload", "Extracting")
+        engine: Engine name (e.g., "Pyrogram", "Archive Extractor")
+        user_name: Name of the user
+        user_id: Telegram user ID
+        elapsed: Elapsed time in seconds
+    
+    Returns:
+        Formatted progress text string
+    """
+    percent = (current * 100) / total if total > 0 else 0
+    bar = progress_bar(current, total, length=12)
+    
+    text = (
+        f"<code>[{bar}] {percent:.1f}%</code>\n"
+        f"<b>┠ Processed:</b> <code>{get_readable_file_size(current)}</code> of <code>{get_readable_file_size(total)}</code>\n"
+        f"<b>┠ Status:</b> <code>{status}</code> | ETA: <code>{get_readable_time(eta)}</code>\n"
+        f"<b>┠ Speed:</b> <code>{get_readable_file_size(int(speed))}/s</code> | Elapsed: <code>{get_readable_time(elapsed)}</code>\n"
+        f"<b>┠ Engine:</b> <code>{engine}</code>\n"
+        f"<b>┠ User:</b> <code>{user_name}</code> | ID: <code>{user_id}</code>\n"
+        f"<b>┖</b>"
+    )
+    
+    return text
