@@ -1,11 +1,9 @@
 import os
 import time
-import math
 import asyncio
 import aiohttp
-import datetime
 import logging
-from typing import Tuple
+from typing import Tuple, Optional
 
 from pyrogram import Client
 from pyrogram.errors import UserIsBlocked, InputUserDeactivated, PeerIdInvalid, FloodWait
@@ -28,39 +26,56 @@ class temp:
 # Human-readable helpers
 # ──────────────────────────────────────────────────────────────────────────────
 def get_readable_file_size(size_in_bytes: int) -> str:
-    if size_in_bytes is None:
+    """Convert bytes to human-readable format."""
+    if size_in_bytes is None or size_in_bytes == 0:
         return "0 B"
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size_in_bytes < 1024:
-            return f"{size_in_bytes:.2f} {unit}"
-        size_in_bytes /= 1024
-    return f"{size_in_bytes:.2f} PB"
+    
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    index = 0
+    size = float(size_in_bytes)
+    
+    while size >= 1024 and index < len(units) - 1:
+        size /= 1024
+        index += 1
+    
+    return f"{size:.2f} {units[index]}"
 
 
 def get_readable_time(seconds: float) -> str:
+    """Convert seconds to human-readable time format."""
     seconds = int(seconds)
+    if seconds < 0:
+        return "0s"
+    
     minutes, secs = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
     days, hours = divmod(hours, 24)
+    
     parts = []
     if days:    parts.append(f"{days}d")
     if hours:   parts.append(f"{hours}h")
     if minutes: parts.append(f"{minutes}m")
-    parts.append(f"{secs}s")
+    if secs or not parts:  # Always show seconds if nothing else
+        parts.append(f"{secs}s")
+    
     return " ".join(parts)
 
 
 def progress_bar(current: int, total: int, length: int = 20) -> str:
-    if total == 0:
+    """Generate a progress bar string."""
+    if total <= 0:
         return "░" * length
-    filled = int(length * current / total)
+    
+    percentage = min(current / total, 1.0)  # Cap at 100%
+    filled = int(length * percentage)
     return "█" * filled + "░" * (length - filled)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Time string → seconds
+# Time string → seconds (no need for async)
 # ──────────────────────────────────────────────────────────────────────────────
-async def get_seconds(time_str: str) -> int:
+def get_seconds(time_str: str) -> int:
+    """Convert time string like '5 mins' to seconds."""
     mapping = {
         "sec": 1, "secs": 1, "second": 1, "seconds": 1,
         "min": 60, "mins": 60, "minute": 60, "minutes": 60,
@@ -70,11 +85,15 @@ async def get_seconds(time_str: str) -> int:
         "month": 2592000, "months": 2592000,
         "year": 31536000, "years": 31536000,
     }
+    
     parts = time_str.lower().strip().split()
     if len(parts) != 2:
         return 0
+    
     try:
         value = int(parts[0])
+        if value < 0:
+            return 0
         multiplier = mapping.get(parts[1], 0)
         return value * multiplier
     except ValueError:
@@ -84,24 +103,34 @@ async def get_seconds(time_str: str) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 # Welcome image — fixed URL from config.py (WELCOME_IMAGE)
 # ──────────────────────────────────────────────────────────────────────────────
-async def get_welcome_image() -> str:
+def get_welcome_image() -> str:
+    """Get welcome image URL from config."""
     from config import Config
     return Config.WELCOME_IMAGE
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Force-subscribe check
+# Force-subscribe check (optimized with concurrent checks)
 # ──────────────────────────────────────────────────────────────────────────────
 async def check_force_sub(client: Client, user_id: int, channels: list) -> list:
     """Returns list of channel usernames the user has NOT joined."""
-    not_joined = []
-    for ch in channels:
+    
+    async def check_single_channel(ch: str) -> Optional[str]:
+        """Check if user is in a single channel. Returns channel if not joined."""
         try:
             member = await client.get_chat_member(ch, user_id)
             if member.status.value in ("left", "banned", "kicked"):
-                not_joined.append(ch)
+                return ch
         except Exception:
-            not_joined.append(ch)
+            return ch
+        return None
+    
+    # Run all checks concurrently for speed
+    tasks = [check_single_channel(ch) for ch in channels]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Filter out None values and exceptions
+    not_joined = [ch for ch in results if ch and not isinstance(ch, Exception)]
     return not_joined
 
 
@@ -109,6 +138,7 @@ async def check_force_sub(client: Client, user_id: int, channels: list) -> list:
 # Broadcast helpers
 # ──────────────────────────────────────────────────────────────────────────────
 async def users_broadcast(user_id: int, message, pin: bool = False) -> Tuple[bool, str]:
+    """Broadcast message to a single user."""
     try:
         sent = await message.copy(chat_id=user_id)
         if pin:
@@ -132,6 +162,7 @@ async def users_broadcast(user_id: int, message, pin: bool = False) -> Tuple[boo
 
 
 async def groups_broadcast(chat_id: int, message, pin: bool = False) -> str:
+    """Broadcast message to a group."""
     try:
         sent = await message.copy(chat_id=chat_id)
         if pin:
@@ -149,6 +180,7 @@ async def groups_broadcast(chat_id: int, message, pin: bool = False) -> str:
 
 
 async def clear_junk(user_id: int, message) -> Tuple[bool, str]:
+    """Send message to user and return status."""
     try:
         await message.copy(chat_id=user_id)
         return True, "Success"
@@ -161,6 +193,7 @@ async def clear_junk(user_id: int, message) -> Tuple[bool, str]:
 
 
 async def junk_group(chat_id: int, message) -> Tuple[bool, str, str]:
+    """Send message to group and return status."""
     try:
         await message.copy(chat_id=chat_id)
         return True, "ok", ""
@@ -169,29 +202,52 @@ async def junk_group(chat_id: int, message) -> Tuple[bool, str, str]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Download helpers
+# Download helpers (optimized chunk size and error handling)
 # ──────────────────────────────────────────────────────────────────────────────
 async def download_url(url: str, dest: str, progress_callback=None) -> str:
-    """Download a direct URL file to dest directory. Returns local path."""
+    """
+    Download a direct URL file to dest directory. Returns local path.
+    Optimized with larger chunk size and better error handling.
+    """
     os.makedirs(dest, exist_ok=True)
+    
+    # Extract filename from URL, remove query params
     filename = url.split("?")[0].split("/")[-1] or "downloaded_file"
     local_path = os.path.join(dest, filename)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=None)) as resp:
-            resp.raise_for_status()
-            total = int(resp.headers.get("Content-Length", 0))
-            done  = 0
-            start = time.time()
+    connector = aiohttp.TCPConnector(limit=10)
+    timeout = aiohttp.ClientTimeout(total=None, connect=30)
+    
+    async with aiohttp.ClientSession(connector=connector) as session:
+        try:
+            async with session.get(url, timeout=timeout) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("Content-Length", 0))
+                done = 0
+                start = time.time()
 
-            with open(local_path, "wb") as f:
-                async for chunk in resp.content.iter_chunked(1024 * 64):
-                    f.write(chunk)
-                    done += len(chunk)
-                    if progress_callback:
-                        elapsed = time.time() - start
-                        speed   = done / elapsed if elapsed > 0 else 0
-                        eta     = (total - done) / speed if speed > 0 else 0
-                        await progress_callback(done, total, speed, eta)
+                # Use larger chunk size for faster downloads (256KB)
+                with open(local_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(262144):
+                        f.write(chunk)
+                        done += len(chunk)
+                        
+                        if progress_callback:
+                            elapsed = time.time() - start
+                            speed = done / elapsed if elapsed > 0 else 0
+                            eta = (total - done) / speed if speed > 0 else 0
+                            await progress_callback(done, total, speed, eta)
+        
+        except aiohttp.ClientError as e:
+            log.error(f"Download failed for {url}: {e}")
+            # Clean up partial file
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            raise
+        except Exception as e:
+            log.exception(f"Unexpected error downloading {url}: {e}")
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            raise
 
     return local_path
