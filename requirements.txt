@@ -5,4 +5,8 @@ pymongo
 aiohttp
 pytz
 rarfile
-# Optional: install system package p7zip-full for 7z/rar support
+patool
+py7zr
+aiofiles
+Pillow
+hachoir
