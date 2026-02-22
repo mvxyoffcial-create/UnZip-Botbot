@@ -1,14 +1,14 @@
 import os
 import time
+import math
 import asyncio
 import aiohttp
+import datetime
 import logging
 from typing import Tuple
 
 from pyrogram import Client
 from pyrogram.errors import UserIsBlocked, InputUserDeactivated, PeerIdInvalid, FloodWait
-
-from config import WELCOME_IMAGE
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +85,8 @@ async def get_seconds(time_str: str) -> int:
 # Welcome image — fixed URL from config.py (WELCOME_IMAGE)
 # ──────────────────────────────────────────────────────────────────────────────
 async def get_welcome_image() -> str:
-    return WELCOME_IMAGE
+    from config import Config
+    return Config.WELCOME_IMAGE
 
 
 # ──────────────────────────────────────────────────────────────────────────────
