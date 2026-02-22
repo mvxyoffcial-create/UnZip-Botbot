@@ -1,86 +1,99 @@
 class script:
 
-    START_TXT = """<b>ʜᴇʏ, {}!</b>
-<b>ɪ'ᴍ ᴀ ᴘᴏᴡᴇʀғᴜʟ UNZIP & FILE MANAGER BOT ⚡</b>
-<b>ɪ ᴄᴀɴ ᴇxᴛʀᴀᴄᴛ ZIP, RAR, 7Z and archives 🚀</b>
-<b>ᴊᴜsᴛ sᴇɴᴅ ᴀ ғɪʟᴇ — ᴀɴᴅ ɢᴇᴛ ʏᴏᴜʀ ᴇxᴛʀᴀᴄᴛᴇᴅ ғɪʟᴇs 📂</b>"""
+    START_TXT = """<b>ʜᴇʏ, {} 👋</b>
+<b>ɪ ᴀᴍ ᴀ ᴘᴏᴡᴇʀғᴜʟ UNZIP & ғɪʟᴇ ᴍᴀɴᴀɢᴇʀ ʙᴏᴛ ⚡</b>
+<b>ɪ ᴄᴀɴ ᴇxᴛʀᴀᴄᴛ ZIP • RAR • 7Z • TAR 🚀</b>
+<b>ᴊᴜsᴛ sᴇɴᴅ ᴀ ғɪʟᴇ ᴀɴᴅ ɢᴇᴛ ᴇxᴛʀᴀᴄᴛᴇᴅ ғɪʟᴇs 📂</b>
+<b>ғᴀsᴛ • sᴍᴀʀᴛ • ᴘʀᴇᴍɪᴜᴍ 💎</b>"""
 
-    GSTART_TXT = """<b>ʜᴇʏ, {}!</b>
-<b>ɪ'ᴍ ᴀ ғᴀsᴛ & sᴍᴀʀᴛ UNZIP BOT 🤖</b>
-<b>ᴇxᴛʀᴀᴄᴛ ғɪʟᴇs ғʀᴏᴍ ᴢɪᴘ, ʀᴀʀ, 7ᴢ, ᴛᴀʀ ɪɴ sᴇᴄᴏɴᴅs 💎</b>
-<b>ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ ᴏʀ sᴇɴᴅ ᴀ ғɪʟᴇ ᴛᴏ sᴛᴀʀᴛ 🌐</b>"""
 
-    HELP_TXT = """<b>✨ HOW TO EXTRACT FILES ✨</b>
-1️⃣ Send ZIP / RAR / 7Z file
-2️⃣ Wait for processing
-3️⃣ Receive extracted files
+    GSTART_TXT = """<b>ʜᴇʏ, {} 👋</b>
+<b>ɪ’ᴍ ᴀ ғᴀsᴛ & sᴍᴀʀᴛ UNZIP ʙᴏᴛ 🤖</b>
+<b>ᴇxᴛʀᴀᴄᴛ ZIP • RAR • 7Z • TAR ɪɴ sᴇᴄᴏɴᴅs ⚡</b>
+<b>ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ ᴏʀ sᴇɴᴅ ᴀ ғɪʟᴇ 🌐</b>"""
 
-📌 FEATURES
-➤ Fast extraction ⚡
-➤ Large file support 📦
-➤ Rename before upload ✏️
-➤ Custom thumbnail 🖼️
-➤ Direct delivery 🚀
 
-Start now!"""
+    HELP_TXT = """<b>✨ ʜᴏᴡ ᴛᴏ ᴇxᴛʀᴀᴄᴛ ғɪʟᴇs ✨</b>
 
-    ABOUT_TXT = """<b>╭────[ MY DETAILS ]────⍟</b>
-<b>├ Name : [{}](https://t.me/{})</b>
-<b>├ Developer : @Venuboyy</b>
-<b>├ Library : Pyrogram</b>
-<b>├ Language : Python 3</b>
-<b>├ Database : MongoDB</b>
-<b>├ Server : Heroku / VPS</b>
-<b>├ Feature : File Extract ⚡</b>
-<b>├ Build Status : v1.0 Stable</b>
-<b>╰───────────────⍟</b>"""
+1️⃣ sᴇɴᴅ ZIP / RAR / 7Z ғɪʟᴇ  
+2️⃣ ᴡᴀɪᴛ ғᴏʀ ᴘʀᴏᴄᴇssɪɴɢ  
+3️⃣ ɢᴇᴛ ᴇxᴛʀᴀᴄᴛᴇᴅ ғɪʟᴇs  
 
-    FORCE_SUB_TXT = """<b>👋 Hey {}!</b>
-<b>To use this bot you must join our channels first!</b>
-<b>Please join the channels below and click ✅ Joined.</b>"""
+<b>📌 ғᴇᴀᴛᴜʀᴇs</b>
+⚡ ғᴀsᴛ ᴇxᴛʀᴀᴄᴛɪᴏɴ  
+📦 ʟᴀʀɢᴇ ғɪʟᴇ sᴜᴘᴘᴏʀᴛ  
+✏️ ʀᴇɴᴀᴍᴇ ʙᴇғᴏʀᴇ ᴜᴘʟᴏᴀᴅ  
+🖼️ ᴄᴜsᴛᴏᴍ ᴛʜᴜᴍʙɴᴀɪʟ  
+🚀 ᴅɪʀᴇᴄᴛ ᴅᴇʟɪᴠᴇʀʏ  
 
-    PREMIUM_END_TEXT = """<b>Hey {}!</b>
-<b>Your premium subscription has ended. 😢</b>
-<b>Buy premium again to enjoy 4GB uploads and more!</b>"""
+<b>sᴛᴀʀᴛ ɴᴏᴡ!</b>"""
 
-    BPREMIUM_TXT = """<b>💎 PREMIUM PLANS</b>
 
-<b>⚡ Free User</b>
-├ Upload Limit: 2 GB
-└ Basic Features
+    # ✅ YOUR CUSTOM ABOUT ADDED HERE
+    ABOUT_TXT = """<b>╭────[ ᴍʏ ᴅᴇᴛᴀɪʟs ]────⍟
+├⍟ Mʏ Nᴀᴍᴇ : <a href=https://t.me/{}>{}</a>
+├⍟ Dᴇᴠᴇʟᴏᴘᴇʀ : </b> @Venuboyy <b> 
+├⍟ Lɪʙʀᴀʀʏ : <a href='https://docs.pyrogram.org/'>ᴘʏʀᴏɢʀᴀᴍ</a>
+├⍟ Lᴀɴɢᴜᴀɢᴇ : <a href='https://www.python.org/download/releases/3.0/'>ᴘʏᴛʜᴏɴ 𝟹</a> 
+├⍟ Dᴀᴛᴀʙᴀsᴇ : <a href='https://www.mongodb.com/'>ᴍᴏɴɢᴏ ᴅʙ</a> 
+├⍟ Bᴏᴛ Sᴇʀᴠᴇʀ : <a href='https://heroku.com/'>ʜᴇʀᴏᴋᴜ</a> 
+├⍟ Bᴜɪʟᴅ Sᴛᴀᴛᴜs : ᴠ1.4 [ ꜱᴛᴀʙʟᴇ ]
+╰───────────────⍟</b>"""
 
-<b>👑 Premium User</b>
-├ Upload Limit: 4 GB
-├ Priority Processing
-├ All Features Unlocked
-└ Custom Thumbnail
 
-<b>Click below to buy premium!</b>"""
+    FORCE_SUB_TXT = """<b>ʜᴇʏ {} 👋</b>
+<b>ᴛᴏ ᴜsᴇ ᴛʜɪs ʙᴏᴛ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟs ғɪʀsᴛ 📢</b>
+<b>ᴊᴏɪɴ ᴀɴᴅ ᴘʀᴇss ✅ ᴊᴏɪɴᴇᴅ</b>"""
 
-    SETTINGS_TXT = """<b>⚙️ SETTINGS</b>
-<b>Configure your bot preferences below:</b>"""
 
-    RENAME_TXT = """<b>✏️ Send the new filename for this file:</b>
-<i>(Send /skip to keep original name)</i>"""
+    PREMIUM_END_TEXT = """<b>ʜᴇʏ {} 😢</b>
+<b>ʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ʜᴀs ᴇɴᴅᴇᴅ</b>
+<b>ʙᴜʏ ᴀɢᴀɪɴ ᴛᴏ ᴜɴʟᴏᴄᴋ 4GB ᴜᴘʟᴏᴀᴅ 💎</b>"""
+
+
+    BPREMIUM_TXT = """<b>💎 ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴs</b>
+
+<b>⚡ ғʀᴇᴇ ᴜsᴇʀ</b>
+├ 2GB ᴜᴘʟᴏᴀᴅ  
+└ ʙᴀsɪᴄ  
+
+<b>👑 ᴘʀᴇᴍɪᴜᴍ</b>
+├ 4GB ᴜᴘʟᴏᴀᴅ  
+├ ᴘʀɪᴏʀɪᴛʏ ⚡  
+├ ᴀʟʟ ғᴇᴀᴛᴜʀᴇs 🔓  
+└ ᴛʜᴜᴍʙɴᴀɪʟ 🖼  
+
+<b>ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ 👇</b>"""
+
+
+    SETTINGS_TXT = """<b>⚙️ sᴇᴛᴛɪɴɢs</b>
+<b>ᴄᴏɴғɪɢᴜʀᴇ ʙᴇʟᴏᴡ</b>"""
+
+
+    RENAME_TXT = """<b>✏️ sᴇɴᴅ ɴᴇᴡ ғɪʟᴇ ɴᴀᴍᴇ</b>
+<i>(/skip ᴛᴏ ᴋᴇᴇᴘ)</i>"""
+
 
     PROGRESS_TXT = """{emoji} <b>{action}...</b>
 
 {bar}
 
-<b>📁 Total Size :</b> <code>{total}</code>
+<b>📁 ᴛᴏᴛᴀʟ :</b> <code>{total}</code>
 <b>{io_label} :</b> <code>{done}</code>
-<b>📊 Progress :</b> <code>{percent:.1f}%</code>
-<b>⚡ Speed :</b> <code>{speed}/s</code>
-<b>⏳ Remaining :</b> <code>{eta}</code>"""
+<b>📊 :</b> <code>{percent:.1f}%</code>
+<b>⚡ :</b> <code>{speed}/s</code>
+<b>⏳ :</b> <code>{eta}</code>"""
 
-    INFO_TXT = """<b>╭──────────────────────</b>
-<b>➲ First Name :</b> {first}
-<b>➲ Last Name :</b> {last}
-<b>➲ Telegram ID :</b> <code>{uid}</code>
-<b>➲ Data Centre :</b> {dc}
-<b>➲ Username :</b> @{uname}
-<b>➲ Profile :</b> <a href="tg://user?id={uid}">Click Here</a>
-<b>╰──────────────────────</b>"""
 
-    EXTRACT_CHOICE_TXT = """<b>📂 Extraction complete!</b>
-<b>Found {count} file(s). Select files to upload:</b>"""
+    INFO_TXT = """<b>╭──── ᴜsᴇʀ ɪɴғᴏ ────</b>
+<b>➲ ғɪʀsᴛ :</b> {first}
+<b>➲ ʟᴀsᴛ :</b> {last}
+<b>➲ ɪᴅ :</b> <code>{uid}</code>
+<b>➲ ᴅᴄ :</b> {dc}
+<b>➲ ᴜsᴇʀ :</b> @{uname}
+<b>➲ ᴘʀᴏғɪʟᴇ :</b> <a href="tg://user?id={uid}">Open</a>
+<b>╰──────────────</b>"""
+
+
+    EXTRACT_CHOICE_TXT = """<b>📂 ᴇxᴛʀᴀᴄᴛɪᴏɴ ᴄᴏᴍᴘʟᴇᴛᴇ ✅</b>
+<b>{count} ғɪʟᴇ(s) ғᴏᴜɴᴅ — sᴇʟᴇᴄᴛ ᴛᴏ ᴜᴘʟᴏᴀᴅ</b>"""
