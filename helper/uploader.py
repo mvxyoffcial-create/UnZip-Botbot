@@ -53,6 +53,8 @@ async def upload_file(
     spoiler: bool = False,
     status_msg=None,
     user_name=None,   # ← accepted but intentionally unused (caller compat)
+    user_id=None,     # ← accepted but intentionally unused (caller compat)
+    **kwargs,         # ← absorbs any other unexpected keyword arguments
 ) -> None:
     """Upload a single file, choosing the best available client."""
     size   = os.path.getsize(file_path)
