@@ -271,6 +271,83 @@ async def download_url(url: str, dest: str, progress_callback=None) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Upload helper
+# ──────────────────────────────────────────────────────────────────────────────
+async def upload_file(
+    client: Client,
+    message,
+    file_path: str,
+    file_name: str,
+    user_name: str = "User",
+    user_id: int = 0,
+    as_doc: bool = True,
+    thumb: str = None,
+    caption: str = None,
+) -> None:
+    """
+    Upload a file to Telegram with a live progress bar.
+
+    Args:
+        client:    Pyrogram Client instance
+        message:   The original message (used for chat_id and reply)
+        file_path: Local path to the file being uploaded
+        file_name: Display name for the uploaded file
+        user_name: Telegram display name of the requester
+        user_id:   Telegram user ID of the requester
+        as_doc:    If True, send as document; otherwise attempt media type
+        thumb:     Optional thumbnail path
+        caption:   Optional caption; defaults to file_name
+    """
+    start = time.time()
+    progress_msg = await message.reply_text("📤 Starting upload…")
+
+    async def _progress(current: int, total: int) -> None:
+        elapsed = time.time() - start
+        speed = current / elapsed if elapsed > 0 else 0
+        eta = (total - current) / speed if speed > 0 else 0
+        try:
+            await progress_msg.edit_text(
+                get_progress_text(
+                    current, total, speed, eta,
+                    status="Upload",
+                    engine="Pyrogram",
+                    user_name=user_name,
+                    user_id=user_id,
+                    elapsed=elapsed,
+                ),
+                parse_mode="html",
+            )
+        except Exception:
+            pass
+
+    send_kwargs = dict(
+        chat_id=message.chat.id,
+        caption=caption or file_name,
+        thumb=thumb,
+        progress=_progress,
+    )
+
+    try:
+        if as_doc:
+            await client.send_document(
+                document=file_path,
+                file_name=file_name,
+                **send_kwargs,
+            )
+        else:
+            await client.send_document(
+                document=file_path,
+                file_name=file_name,
+                **send_kwargs,
+            )
+        await progress_msg.delete()
+    except Exception as e:
+        log.exception(f"upload_file error for {file_path}: {e}")
+        await progress_msg.edit_text(f"❌ Upload failed: <code>{e}</code>", parse_mode="html")
+        raise
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Formatted progress text generator (new stylish format)
 # ──────────────────────────────────────────────────────────────────────────────
 def get_progress_text(
